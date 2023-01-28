@@ -5,13 +5,16 @@ const app = express();
 const path = require('path');
 const https = require('https');
 const ejs = require('ejs');
-const md5 = require('md5');
 const mongoose  = require('mongoose');
 const {Schema}= mongoose;
 
 app.use(express.json()); // for parsing application/json instead of body-parser
 app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 app.use(express.static(path.join(__dirname,'public')))
+
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
+// const myPlaintextPassword = process.env.SECRET;
 
 app.set('view engine', 'ejs');
 mongoose.set('strictQuery', true);
@@ -39,37 +42,42 @@ app.get("/register", (req,res) => {
     res.render('register');
 });
 
-app.post('/register', (req,res)=>{
-    const user = new User({
-        email: req.body.username,
-        password: md5(req.body.password)
-    });
 
-    user.save(err =>{
-        if(!err){
-            res.render('secrets')
-        } else {
-            console.log(err)
-        }
-    })
+app.post('/register', (req,res)=>{
+    bcrypt.hash(req.body.password, saltRounds).then(function(hash) {
+        const user = new User({
+            email: req.body.username,
+            password: hash
+        });
+    
+        user.save(err =>{
+            if(!err){
+                res.render('secrets')
+            } else {
+                console.log(err)
+            }
+        })
+    });
 });
 
 app.post('/login', (req,res) => {
     const email = req.body.username;
-    const password = md5(req.body.password);
+    const password = req.body.password;
+  
     User.findOne({ email: email}, (err, usr)=>{
        if (err) {
         console.log(err);
        } else if (usr){
-         if (usr.password === password) {
-            res.render('secrets');
-         }
-         else {
-            console.log("Username or password are not correct!")
-         }
-       }
-    })
+        bcrypt.compare(password, usr.password).then(function(result) {
+            if(result){
+                res.render("secrets")
+            } else{res.render("login")}
+        }); 
+    }
+         
 })
+
+});
 
 
 app.listen(3000,()=>{
