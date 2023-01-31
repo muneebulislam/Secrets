@@ -1,86 +1,103 @@
 //jshint esversion:6
-require('dotenv').config();
-const express = require('express');
+require("dotenv").config();
+const express = require("express");
 const app = express();
-const path = require('path');
-const https = require('https');
-const ejs = require('ejs');
-const mongoose  = require('mongoose');
-const {Schema}= mongoose;
+const path = require("path");
+const https = require("https");
+const ejs = require("ejs");
+const session = require("express-session");
+const passport = require("passport");
+const passportLocalMongoose = require("passport-local-mongoose");
+const mongoose = require("mongoose");
+const { Schema } = mongoose;
 
 app.use(express.json()); // for parsing application/json instead of body-parser
 app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
-app.use(express.static(path.join(__dirname,'public')))
+app.use(express.static(path.join(__dirname, "public")));
+app.set("view engine", "ejs");
+mongoose.set("strictQuery", true);
 
-const bcrypt = require('bcrypt');
-const saltRounds = 10;
-// const myPlaintextPassword = process.env.SECRET;
+app.use(
+  session({
+    secret: "keyboard cat",
+    resave: false,
+    saveUninitialized: false,
+    // cookie: { secure: true },
+  })
+);
 
-app.set('view engine', 'ejs');
-mongoose.set('strictQuery', true);
+app.use(passport.initialize());
+app.use(passport.session());
+
 mongoose.connect("mongodb://localhost:27017/userDb");
 
-
 const userSchema = new Schema({
-    email:String,
-    password:String,
+  email: String,
+  password: String,
+});
+userSchema.plugin(passportLocalMongoose);
+const User = new mongoose.model("User", userSchema);
+
+
+// CHANGE: USE "createStrategy" INSTEAD OF "authenticate"
+passport.use(User.createStrategy());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
+
+app.get("/", (req, res) => {
+  res.render("home");
 });
 
-
- 
-const User = new mongoose.model('User', userSchema);
-
-app.get("/", (req,res) => {
-    res.render('home');
+app.get("/login", (req, res) => {
+  res.render("login");
 });
 
-app.get("/login", (req,res) => {
-    res.render('login');
+app.get("/register", (req, res) => {
+  res.render("register");
 });
 
-app.get("/register", (req,res) => {
-    res.render('register');
+app.get("/secrets", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.render("secrets");
+  } else {
+    res.redirect("/login");
+  }
 });
 
-
-app.post('/register', (req,res)=>{
-    bcrypt.hash(req.body.password, saltRounds).then(function(hash) {
-        const user = new User({
-            email: req.body.username,
-            password: hash
-        });
-    
-        user.save(err =>{
-            if(!err){
-                res.render('secrets')
-            } else {
-                console.log(err)
-            }
-        })
-    });
-});
-
-app.post('/login', (req,res) => {
-    const email = req.body.username;
-    const password = req.body.password;
-  
-    User.findOne({ email: email}, (err, usr)=>{
-       if (err) {
+app.post("/register", (req, res) => {
+  User.register(
+    { username: req.body.username },
+    req.body.password,
+    function (err, user) {
+      if (err) {
         console.log(err);
-       } else if (usr){
-        bcrypt.compare(password, usr.password).then(function(result) {
-            if(result){
-                res.render("secrets")
-            } else{res.render("login")}
-        }); 
+        res.redirect("/register");
+      } else {
+        passport.authenticate("local"),
+          function (req, res) {
+            res.redirect("/secrets");
+          };
+      }
     }
-         
-})
-
+  );
 });
 
-
-app.listen(3000,()=>{
-    console.log("Server is running on http//localhost:3000 ");
+app.post("/login", (req, res) => {
+  const user = new User({
+    username: req.body.username,
+    password: req.body.password,
+  });
+  req.login(user, function(err){
+    if (err) {
+      console.log(err);
+    } else {
+      passport.authenticate("local",{ failureRedirect: '/login' }),
+      function(req, res) {
+        res.redirect('/secrets');
+    }}
+  });
 });
 
+app.listen(3000, () => {
+  console.log("Server is running on http//localhost:3000 ");
+});
