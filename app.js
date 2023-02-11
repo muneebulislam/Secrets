@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const path = require("path");
 const https = require("https");
 const ejs = require("ejs");
+const cookieParser = require('cookie-parser');
 const session = require("express-session");
 const passport = require("passport");
 const authRoute = require("./routes/auth");
@@ -13,11 +14,11 @@ const authRoute = require("./routes/auth");
 app.use(express.json()); // for parsing application/json instead of body-parser
 
 app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
-app.use(express.static(path.join(__dirname, "public")));
+app.use(cookieParser()); // for parsing
+
 app.set("view engine", "ejs");
 
-app.use(passport.initialize());
-app.use(passport.session());
+
 
 // To mute the error message
 mongoose.set("strictQuery", true);
@@ -33,31 +34,20 @@ app.use(
 
 app.use(passport.initialize());
 app.use(passport.session());
+app.use(express.static(path.join(__dirname, "public")));
 
 mongoose.connect("mongodb://localhost:27017/userDb");
 
 //routes
 app.use('/', authRoute);
 
-app.get("/", (req, res) => {
-  res.render("home");
-});
+// passport configurations
+const User = require('./models/User')
+passport.use(User.createStrategy());
 
-app.get("/login", (req, res) => {
-  res.render("login");
-});
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
-app.get("/register", (req, res) => {
-  res.render("register");
-});
-
-app.get("/secrets", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.render("secrets");
-  } else {
-    res.redirect("/login");
-  }
-});
 
 
 app.listen(3000, () => {
